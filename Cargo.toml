@@ -2,21 +2,33 @@
 name = "grader"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/arvinduh/grader"
 
 [[bin]]
 name = "bsg"
 path = "src/main.rs"
 
 [dependencies]
+axoupdater = { version = "0.10.2", default-features = false, features = [
+  "github_releases",
+], optional = true }
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.6.7", features = ["derive"] }
 file_type_enum = "3.0.1"
 scraper = "0.27.0"
+semver = { version = "1", optional = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+tempfile = { version = "3", optional = true }
 thiserror = "2.0.21"
+tokio = { version = "1", features = ["rt", "net", "time"], optional = true }
 tracing = "0.1.44"
 zip = "8.6.0"
+
+[features]
+default = ["update"]
+update = ["dep:axoupdater", "dep:semver", "dep:tempfile", "dep:tokio"]
+
 
 [lints.rust]
 unused_imports = "warn"
@@ -26,3 +38,24 @@ unused_qualifications = "warn"
 absolute_paths = "warn"
 enum_glob_use = "deny"
 wildcard_imports = "deny"
+
+# Config for 'dist' (cargo-dist): GitHub Releases are the only channel - no
+# crates.io publish.
+[workspace.metadata.dist]
+cargo-dist-version = "0.32.0"
+ci = "github"
+installers = ["shell", "powershell"]
+targets = ["aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+install-path = ["~/.local/bin", "~/.cargo/bin"]
+install-updater = false
+source-tarball = false
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dist]
+inherits = "release"
