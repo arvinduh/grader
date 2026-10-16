@@ -1,0 +1,28 @@
+[package]
+name = "grader"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "bsg"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.7", features = ["derive"] }
+file_type_enum = "3.0.1"
+scraper = "0.27.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+tracing = "0.1.44"
+zip = "8.6.0"
+
+[lints.rust]
+unused_imports = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+absolute_paths = "warn"
+enum_glob_use = "deny"
+wildcard_imports = "deny"

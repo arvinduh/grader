@@ -1,0 +1,26 @@
+# rustfmt has no user-level config slot, but it searches parent directories,
+# so this file governs every crate under $HOME that lacks its own.
+#
+# Stable options only. wrap_comments / format_strings / format_code_in_doc_comments
+# are nightly-gated — see the commented block below.
+
+max_width = 80
+tab_spaces = 2
+hard_tabs = false
+newline_style = "Unix"
+edition = "2024"
+use_field_init_shorthand = true
+use_try_shorthand = true
+reorder_imports = true
+reorder_modules = true
+
+
+# --- nightly only -------------------------------------------------------------
+# Uncomment these AND run `cargo +nightly fmt` to get comment/string reflow.
+# Stable rustfmt warns and ignores them.
+
+wrap_comments = true
+format_strings = true
+format_code_in_doc_comments = true
+imports_granularity = "Item"
+group_imports = "StdExternalCrate"
