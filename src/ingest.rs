@@ -14,14 +14,12 @@ mod time;
 
 use std::io;
 
+pub use extract::Task;
 pub use extract::extract;
 pub use find::find;
 pub use scan::scan;
 pub use select::select;
 use zip::result::ZipError;
-
-/// The manifest file name generated for ingested assignments.
-pub const MANIFEST_FILENAME: &str = "_manifest.json";
 
 /// Every error ingesting can produce.
 #[derive(Debug, thiserror::Error)]

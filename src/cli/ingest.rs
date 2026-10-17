@@ -9,6 +9,9 @@ use grader::ingest;
 use grader::ingest::manifest::Manifest;
 use zip::ZipArchive;
 
+/// The manifest file name generated for ingested assignments.
+pub const MANIFEST_FILENAME: &str = ".manifest.json";
+
 #[derive(clap::Args)]
 pub struct IngestArgs {
   /// Brightspace downloads, or directories whose downloads to ingest
@@ -25,6 +28,7 @@ pub struct IngestArgs {
 struct ValidatedDownload {
   zip: ZipArchive<File>,
   manifest: Manifest,
+  tasks: Vec<ingest::Task>,
   output_dir: path::PathBuf,
 }
 
@@ -46,13 +50,11 @@ impl IngestArgs {
         None => path.with_file_name(&assignment.name),
       };
       let students = ingest::scan(&mut zip)?;
-      let manifest = Manifest {
-        assignment,
-        students: ingest::select(&students),
-      };
+      let (manifest, tasks) = ingest::select(assignment, &students);
       validated_downloads.push(ValidatedDownload {
         zip,
         manifest,
+        tasks,
         output_dir,
       });
     }
@@ -62,10 +64,10 @@ impl IngestArgs {
     for mut download in validated_downloads {
       ingest::extract(
         &mut download.zip,
-        &download.manifest,
+        &download.tasks,
         &download.output_dir,
       )?;
-      let manifest_path = download.output_dir.join(ingest::MANIFEST_FILENAME);
+      let manifest_path = download.output_dir.join(MANIFEST_FILENAME);
       download.manifest.write_to(&manifest_path)?;
     }
 

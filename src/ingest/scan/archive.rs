@@ -25,6 +25,7 @@ pub enum Error {
 }
 
 /// Physical storage address inside the Brightspace download archive.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ZipLocation {
   /// File sits directly in the download zip.
   Direct {

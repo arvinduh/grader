@@ -37,6 +37,7 @@ unused_qualifications = "warn"
 [lints.clippy]
 absolute_paths = "warn"
 enum_glob_use = "deny"
+single_component_path_imports = "allow"
 wildcard_imports = "deny"
 
 # Config for 'dist' (cargo-dist): GitHub Releases are the only channel - no

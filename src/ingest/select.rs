@@ -1,7 +1,8 @@
 //! Keeps the latest version of each file and names where it goes.
 //!
-//! Pure: turns `scan`'s students and submissions into manifest entries.
-//! Reading the zip belongs to `scan`; writing files belongs to `extract`.
+//! Pure: turns `scan`'s students and submissions into manifest entries and
+//! extraction tasks. Reading the zip belongs to `scan`; writing files belongs
+//! to `extract`.
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -10,19 +11,22 @@ use std::path::Path;
 
 use chrono::NaiveDateTime;
 
+use crate::ingest::extract;
+use crate::ingest::find::Assignment;
 use crate::ingest::manifest;
-use crate::ingest::manifest::Extracted;
 use crate::ingest::scan::Student;
 use crate::ingest::scan::ZipLocation;
 
 /// A selected file with its clean relative path and submission time.
 struct SelectedFile<'a> {
   path: String,
+  original: String,
   submitted_at: NaiveDateTime,
   location: &'a ZipLocation,
 }
 
-/// Picks each student's latest files and names their destinations.
+/// Picks each student's latest files, names their destinations, and builds
+/// the manifest and extraction tasks.
 ///
 /// Files are the same when their paths match case-insensitively after
 /// dropping copy suffixes like `hw (2).ipynb`. Later attempts win; within an
@@ -31,7 +35,10 @@ struct SelectedFile<'a> {
 /// A student with one file gets `<slug>.<ext>`; otherwise files keep their
 /// relative paths under `<slug>/`. Colliding slugs get `_<user id>` appended,
 /// and an empty slug falls back to the user id.
-pub fn select(students: &[Student]) -> Vec<manifest::Entry> {
+pub fn select(
+  assignment: Assignment,
+  students: &[Student],
+) -> (manifest::Manifest, Vec<extract::Task>) {
   // Select latest files for each student.
   let student_files: Vec<(&Student, Vec<SelectedFile<'_>>)> = students
     .iter()
@@ -47,36 +54,70 @@ pub fn select(students: &[Student]) -> Vec<manifest::Entry> {
     *slug_counts.entry(slug.as_str()).or_default() += 1;
   }
 
-  // Build manifest entries.
-  student_files
-    .into_iter()
-    .zip(&slugs)
-    .map(|((student, files), slug)| {
-      let user_id = student.id.to_string();
-      let base_name = match slug_counts.get(slug.as_str()).copied().unwrap_or(0)
-      {
-        _ if slug.is_empty() => user_id.clone(),
-        1 => slug.clone(),
-        _ => format!("{slug}_{user_id}"),
+  let mut manifest_students = BTreeMap::new();
+  let mut tasks = Vec::new();
+
+  for ((student, files), slug) in student_files.into_iter().zip(&slugs) {
+    let user_id = student.id.to_string();
+    let base_name = match slug_counts.get(slug.as_str()).copied().unwrap_or(0) {
+      _ if slug.is_empty() => user_id,
+      1 => slug.clone(),
+      _ => format!("{slug}_{user_id}"),
+    };
+
+    let paths = destination_paths(&base_name, &files);
+    let is_single = files.len() == 1;
+
+    let mut selected = BTreeMap::new();
+    for (file, path) in files.into_iter().zip(paths) {
+      let new_name = if is_single {
+        path.clone()
+      } else {
+        file.path.clone()
       };
 
-      let paths = destination_paths(&base_name, &files);
+      selected.insert(
+        new_name,
+        manifest::SelectedFile {
+          original: file.original,
+          submitted_at: file.submitted_at,
+        },
+      );
 
-      manifest::Entry {
-        user_id,
-        student: student.name.clone(),
-        files: files
-          .into_iter()
-          .zip(paths)
-          .map(|(file, path)| Extracted {
-            path,
-            submitted_at: file.submitted_at,
-            origin: to_origin(file.location),
-          })
-          .collect(),
-      }
-    })
-    .collect()
+      tasks.push(extract::Task {
+        destination: path,
+        location: file.location.clone(),
+      });
+    }
+
+    let submissions = student
+      .submissions
+      .iter()
+      .map(|sub| manifest::SubmissionRecord {
+        submitted_at: sub.submitted_at,
+        comment: sub.comment.clone(),
+        files: sub.files.iter().map(|f| f.rel_path.clone()).collect(),
+      })
+      .collect();
+
+    manifest_students.insert(
+      base_name,
+      manifest::StudentEntry {
+        id: student.id,
+        name: student.name.clone(),
+        submissions,
+        selected,
+      },
+    );
+  }
+
+  (
+    manifest::Manifest {
+      assignment,
+      students: manifest_students,
+    },
+    tasks,
+  )
 }
 
 /// Picks the latest version of each unique file for a single student.
@@ -96,6 +137,7 @@ fn select_files(student: &Student) -> Vec<SelectedFile<'_>> {
             rank,
             SelectedFile {
               path,
+              original: file.rel_path.clone(),
               submitted_at: sub.submitted_at,
               location: &file.location,
             },
@@ -107,6 +149,7 @@ fn select_files(student: &Student) -> Vec<SelectedFile<'_>> {
               rank,
               SelectedFile {
                 path,
+                original: file.rel_path.clone(),
                 submitted_at: sub.submitted_at,
                 location: &file.location,
               },
@@ -138,23 +181,6 @@ fn destination_paths(
       .iter()
       .map(|f| format!("{base_name}/{}", f.path))
       .collect(),
-  }
-}
-
-/// Converts a [ZipLocation] into a manifest [manifest::Origin].
-fn to_origin(location: &ZipLocation) -> manifest::Origin {
-  match location {
-    ZipLocation::Direct { entry } => manifest::Origin {
-      entry: entry.clone(),
-      inner: None,
-    },
-    ZipLocation::Nested {
-      zip_entry,
-      inner_path,
-    } => manifest::Origin {
-      entry: zip_entry.clone(),
-      inner: Some(inner_path.clone()),
-    },
   }
 }
 

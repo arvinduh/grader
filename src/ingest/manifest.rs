@@ -1,8 +1,9 @@
 //! In-memory and on-disk representation of an assignment manifest.
 //!
-//! Plain serializable types plus the student naming rule they share. Deciding
-//! their contents is `select`'s job; writing them is `extract`'s.
+//! Plain serializable types representing assignment metadata, student
+//! submissions, and selected files. Deciding their contents is `select`'s job.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -14,12 +15,12 @@ use serde::Serialize;
 use crate::ingest::find::Assignment;
 use crate::ingest::scan::Name;
 
-/// Every file extracted from one download, grouped by student.
+/// In-memory and on-disk representation of an assignment manifest.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Manifest {
   #[serde(alias = "download")]
   pub assignment: Assignment,
-  pub students: Vec<Entry>,
+  pub students: BTreeMap<String, StudentEntry>,
 }
 
 impl Manifest {
@@ -43,35 +44,40 @@ impl Manifest {
   /// Fails if the file cannot be read or deserialized.
   pub fn read_from(path: &Path) -> io::Result<Self> {
     let file = fs::File::open(path)?;
-    let manifest = serde_json::from_reader(file).map_err(io::Error::other)?;
-    Ok(manifest)
+    serde_json::from_reader(file).map_err(io::Error::other)
   }
 }
 
-/// One student's extracted files.
+/// One student's identity, submission attempts, and selected files.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Entry {
-  pub user_id: String,
-  pub student: Name,
-  pub files: Vec<Extracted>,
+pub struct StudentEntry {
+  /// Unique Brightspace User ID.
+  pub id: u32,
+  /// Student name.
+  pub name: Name,
+  /// All submission attempts made by this student.
+  pub submissions: Vec<SubmissionRecord>,
+  /// Files selected for grading, keyed by their extracted relative name.
+  pub selected: BTreeMap<String, SelectedFile>,
 }
 
-/// One extracted file.
+/// One submission attempt: everything a student uploaded at one time.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Extracted {
-  /// Destination relative to the manifest, `/`-separated, without `..`.
-  pub path: String,
+pub struct SubmissionRecord {
+  /// Local time as Brightspace printed it, to the minute.
+  pub submitted_at: NaiveDateTime,
+  /// Student-provided comment extracted from index.html for this attempt.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub comment: Option<String>,
+  /// Files uploaded in this attempt, relative to the submission root.
+  pub files: Vec<String>,
+}
+
+/// A selected file extracted to disk.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SelectedFile {
+  /// Original relative filename submitted by the student.
+  pub original: String,
   /// When the attempt holding this version was submitted.
   pub submitted_at: NaiveDateTime,
-  /// Where a file sits in the download, by raw zip entry names.
-  pub origin: Origin,
-}
-
-/// Where a file sits in the download, by raw zip entry names.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Origin {
-  /// The entry in the downloaded zip.
-  pub entry: String,
-  /// The member inside `entry` when `entry` is itself a zip.
-  pub inner: Option<String>,
 }
