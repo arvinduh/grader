@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
 # `bsg`
@@ -8,6 +9,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-1e293b?style=flat-square)](#installation)
 
 </div>
+<!-- markdownlint-enable MD033 -->
 
 ---
 
@@ -17,26 +19,23 @@ student files ready for grading.
 
 ## Installation
 
-**macOS & Linux**
+### macOS & Linux
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/arvinduh/grader/releases/latest/download/grader-installer.sh | sh
 ```
 
-**Windows** (PowerShell)
+### Windows (PowerShell)
 
 ```powershell
 powershell -c "irm https://github.com/arvinduh/grader/releases/latest/download/grader-installer.ps1 | iex"
 ```
 
-<details>
-<summary>Or build from source</summary>
+### build from source
 
 ```bash
 cargo install --git https://github.com/arvinduh/grader
 ```
-
-</details>
 
 ---
 
@@ -47,7 +46,7 @@ upload tags (`(1)`), and multiple submission attempts.
 
 `bsg ingest` cleans and organizes everything in one pass:
 
-```
+```txt
 📦 "HW1 Download Oct 14, 2026.zip"
 ├── 📁 109283 - Doe, John - Sep 24.../ hw1.ipynb
 ├── 📁 109283 - Doe, John - Sep 25.../ hw1 (1).ipynb   # Keeps latest attempt
@@ -56,10 +55,11 @@ upload tags (`(1)`), and multiple submission attempts.
 
 ⬇️
 
-```
+```txt
 📂 HW1/
 ├── 📄 doe_john.ipynb      # Single file flattened to <slug>.<ext>
 └── 📁 smith_jane/         # Multi-file submissions cleanly unpacked
+    ├── mod.py
     └── main.py
 ```
 
