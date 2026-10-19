@@ -5,6 +5,7 @@
 //! file and names it, and `extract` writes the files and the
 //! `manifest::Manifest`.
 
+pub mod check;
 mod extract;
 mod find;
 pub mod manifest;

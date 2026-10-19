@@ -6,7 +6,9 @@ use std::path;
 
 use grader::Error;
 use grader::ingest;
+use grader::ingest::check;
 use grader::ingest::manifest::Manifest;
+use tracing;
 use zip::ZipArchive;
 
 /// The manifest file name generated for ingested assignments.
@@ -22,6 +24,10 @@ pub struct IngestArgs {
   /// Directory to extract into instead of beside each download.
   #[arg(long, short, value_name = "DIR")]
   pub output_dir: Option<path::PathBuf>,
+
+  /// Overwrite existing output directories.
+  #[arg(long, short)]
+  pub force: bool,
 }
 
 /// A validated download archive ready for extraction.
@@ -40,15 +46,39 @@ impl IngestArgs {
       ingest::find(target, &mut assignments)?;
     }
 
+    // Diagnose input archives and warn on ambiguous duplicates
+    let diagnosis = check::inputs(assignments);
+    for (name, duplicates) in &diagnosis.duplicates {
+      let oldest = &duplicates.first().unwrap().0;
+      let newest = &duplicates.last().unwrap().0;
+      tracing::warn!(
+        assignment = %name,
+        count = duplicates.len(),
+        oldest = %oldest.display(),
+        newest = %newest.display(),
+        "Multiple archives found for assignment; skipping ambiguous input"
+      );
+    }
+
     // Validate and plan every download before writing anything to disk.
     let mut validated_downloads = Vec::new();
-    for (path, assignment) in assignments {
-      let file = File::open(&path)?;
-      let mut zip = ZipArchive::new(file)?;
+    for (path, assignment) in diagnosis.ready {
       let output_dir = match &self.output_dir {
         Some(dir) => dir.join(&assignment.name),
         None => path.with_file_name(&assignment.name),
       };
+
+      if !check::destination(
+        &assignment,
+        &output_dir,
+        MANIFEST_FILENAME,
+        self.force,
+      )? {
+        continue;
+      }
+
+      let file = File::open(&path)?;
+      let mut zip = ZipArchive::new(file)?;
       let students = ingest::scan(&mut zip)?;
       let (manifest, tasks) = ingest::select(assignment, &students);
       validated_downloads.push(ValidatedDownload {
