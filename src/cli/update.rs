@@ -70,7 +70,7 @@ pub enum Error {
 pub struct UpdateArgs {
   /// Only check for updates without installing.
   #[arg(long, short)]
-  pub check: bool,
+  check: bool,
 }
 
 impl UpdateArgs {

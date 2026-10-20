@@ -28,16 +28,16 @@ pub enum Error {
 )]
 pub struct Cli {
   #[command(subcommand)]
-  pub command: Command,
+  command: Command,
 
   /// Increase logging verbosity (-v for INFO, -vv for DEBUG, -vvv for TRACE).
   #[arg(short, long, action = clap::ArgAction::Count, global = true)]
-  pub verbose: u8,
+  verbose: u8,
 }
 
 /// Subcommands supported by `bsg`.
 #[derive(clap::Subcommand)]
-pub enum Command {
+enum Command {
   Ingest(ingest::IngestArgs),
   #[cfg(feature = "update")]
   Update(update::UpdateArgs),

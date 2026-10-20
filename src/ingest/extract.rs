@@ -9,6 +9,7 @@ use std::io::Cursor;
 use std::io::Read;
 use std::io::Seek;
 use std::path::Path;
+use std::path::PathBuf;
 
 use zip::ZipArchive;
 use zip::result::ZipError;
@@ -45,15 +46,21 @@ pub fn extract<R: Read + Seek>(
   sorted.sort_by_key(|t| &t.location);
 
   let mut nested: Option<(&str, ZipArchive<Cursor<Vec<u8>>>)> = None;
+  let mut last_parent: Option<PathBuf> = None;
+
   for task in sorted {
     let mut dest = out.to_path_buf();
     dest.extend(task.destination.split('/'));
-    if let Some(parent) = dest.parent() {
+    if let Some(parent) = dest.parent()
+      && last_parent.as_deref() != Some(parent)
+    {
       fs::create_dir_all(parent)?;
+      last_parent = Some(parent.to_path_buf());
     }
     match &task.location {
       ZipLocation::Direct { entry } => {
-        io::copy(&mut zip.by_name(entry)?, &mut File::create(&dest)?)?;
+        let mut writer = io::BufWriter::new(File::create(&dest)?);
+        io::copy(&mut zip.by_name(entry)?, &mut writer)?;
       }
       ZipLocation::Nested {
         zip_entry,
@@ -67,7 +74,8 @@ pub fn extract<R: Read + Seek>(
             ZipArchive::new(Cursor::new(bytes))?
           }
         };
-        io::copy(&mut archive.by_name(inner_path)?, &mut File::create(&dest)?)?;
+        let mut writer = io::BufWriter::new(File::create(&dest)?);
+        io::copy(&mut archive.by_name(inner_path)?, &mut writer)?;
         nested = Some((zip_entry.as_str(), archive));
       }
     }

@@ -4,7 +4,6 @@
 //! archives match Brightspace naming conventions before passing them to the
 //! scanner.
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -40,12 +39,15 @@ pub enum Error {
   Time(#[from] time::Error),
 }
 
-/// Represents an assignment's parsed metadata.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+/// Metadata and archive location for a Brightspace assignment.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Assignment {
-  /// The name of the assignment.
+  /// Canonical path to the archive file on disk (omitted from manifests).
+  #[serde(default, skip_serializing)]
+  pub path: PathBuf,
+  /// Name of the assignment parsed from the archive filename.
   pub name: String,
-  /// The date and time when the assignment's archive was downloaded.
+  /// Date and time when the archive was downloaded from Brightspace.
   pub downloaded: NaiveDateTime,
 }
 
@@ -95,50 +97,57 @@ impl Assignment {
         })?;
 
     let downloaded = time::parse(time)?;
+    let path = path.canonicalize()?;
 
     Ok(Assignment {
+      path,
       name: assignment.to_owned(),
       downloaded,
     })
   }
 }
 
-/// Finds all Brightspace assignment archives at the given target path.
+/// Finds, resolves, and deduplicates Brightspace assignment archives across
+/// targets.
 ///
-/// If `target` is a regular file, validates and inserts it into `zip_paths`.
-/// If `target` is a directory, inspects all top-level files non-recursively,
-/// inserting valid assignment archives and logging invalid files at debug
-/// level.
+/// Inspects individual files directly and scans directories non-recursively.
+/// Identical physical archives referenced by multiple target paths or
+/// symlinks are deduplicated.
 ///
 /// # Errors
 ///
-/// Fails on I/O errors reading the directory or if `target` is an unsupported
-/// file type (e.g. symlink).
-pub fn find(
-  target: &Path,
-  zip_paths: &mut BTreeMap<PathBuf, Assignment>,
-) -> Result<(), Error> {
+/// Returns [Error] on I/O errors reading directories or if a target is an
+/// unsupported file type.
+pub fn find(targets: &[impl AsRef<Path>]) -> Result<Vec<Assignment>, Error> {
+  let mut assignments = Vec::new();
+  for target in targets {
+    find_into(target.as_ref(), &mut assignments)?;
+  }
+  assignments.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+  assignments.dedup_by(|a, b| a.path == b.path);
+  Ok(assignments)
+}
+
+fn find_into(target: &Path, out: &mut Vec<Assignment>) -> Result<(), Error> {
   let file_type = FileType::symlink_read_at(target)?;
 
   match file_type {
     FileType::Regular => {
       let assignment = Assignment::from_path(target)?;
-      zip_paths.insert(target.canonicalize()?, assignment);
+      out.push(assignment);
       Ok(())
     }
 
     FileType::Directory => {
       for entry in fs::read_dir(target)? {
         let path = entry?.path();
-        let assignment = Assignment::from_path(&path);
-        let resolved = path.canonicalize()?;
-        match assignment {
+        match Assignment::from_path(&path) {
           Ok(ass) => {
-            zip_paths.insert(resolved, ass);
+            out.push(ass);
           }
           Err(err) => {
             tracing::debug!(
-              path = %resolved.display(),
+              path = %path.display(),
               error = %err,
               "Skipping invalid assignment file"
             );
