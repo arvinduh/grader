@@ -68,6 +68,9 @@ upload tags (`(1)`), and multiple submission attempts.
 - **Unpacks nested zips** — extracts student archives automatically.
 - **Normalizes names** — standardizes files to `last_first` and drops OS junk
   (`.DS_Store`, `__MACOSX`).
+- **Detects duplicates & conflicts** — warns and skips ambiguous input archives
+  sharing an assignment name; checks existing manifests to avoid accidental
+  overwrites.
 
 ```bash
 # Ingest beside the archive
@@ -75,6 +78,12 @@ bsg ingest "HW1 Download.zip"
 
 # Ingest all downloads into a target directory
 bsg ingest ~/Downloads/*.zip -o ./grading/
+
+# Force overwrite and re-extract an existing destination
+bsg ingest "HW1 Download.zip" -f
+
+# Increase logging verbosity (-v for INFO, -vv for DEBUG, -vvv for TRACE)
+bsg -v ingest "HW1 Download.zip"
 ```
 
 ---
