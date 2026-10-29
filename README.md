@@ -82,9 +82,52 @@ bsg ingest ~/Downloads/*.zip -o ./grading/
 # Force overwrite and re-extract an existing destination
 bsg ingest "HW1 Download.zip" -f
 
-# Increase logging verbosity (-v for INFO, -vv for DEBUG, -vvv for TRACE)
+# Increase logging verbosity (-v for WARN, -vv for INFO, -vvv for DEBUG)
 bsg -v ingest "HW1 Download.zip"
 ```
+
+---
+
+## Grading & Workflow Commands
+
+- **`bsg status <ASSIGNMENT>`**: View student submission history, delay, and
+  remaining late pass balance.
+
+  ```bash
+  bsg status hw1 -g G1          # Filter by assigned TA group
+  bsg status hw1 -r Adebayo..Luu # Filter by last-name range
+  ```
+
+- **`bsg grade <ASSIGNMENT> [STUDENT]`**: Run automated Python assertions and
+  prepare clean markdown for AI evaluation.
+
+  ```bash
+  bsg grade hw1 --check-only    # Only run test scripts (*.py)
+  bsg grade hw1 --prep-only     # Strip boilerplate and generate .grade.md
+  ```
+
+- **`bsg repo`**: Initialize and synchronize private course authoring assets.
+
+  ```bash
+  bsg repo init                 # Create local .bsg workspace
+  bsg repo sync                 # Pull latest rubrics, tests, and solutions
+  ```
+
+---
+
+## Workspace Structure
+
+The project is structured as a fine-grained Cargo workspace adhering to the
+Google Rust Style Guide:
+
+- `crates/bsg`: Command-line interface and terminal presentation.
+- `crates/ingest`: Brightspace archive scanning, extraction, and manifest
+  engine.
+- `crates/notebook`: Jupyter notebook parsing and AI grading context
+  preparation.
+- `crates/runner`: Automated Python test script runner and assertion parser.
+- `crates/ledger`: Late pass policy tracking and penalty calculation engine.
+- `crates/workspace`: Course repository discovery and configuration models.
 
 ---
 
