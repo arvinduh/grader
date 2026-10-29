@@ -142,6 +142,7 @@ pub fn find(targets: &[impl AsRef<Path>]) -> Result<Vec<Assignment>, Error> {
 fn find_into(target: &Path, out: &mut Vec<Assignment>) -> Result<(), Error> {
   let file_type = FileType::symlink_read_at(target)?;
 
+  #[allow(clippy::match_wildcard_for_single_variants)]
   match file_type {
     FileType::Regular => {
       let assignment = Assignment::from_path(target)?;
@@ -168,7 +169,7 @@ fn find_into(target: &Path, out: &mut Vec<Assignment>) -> Result<(), Error> {
       Ok(())
     }
 
-    other @ FileType::Symlink => Err(Error::FileType {
+    other => Err(Error::FileType {
       path: target.canonicalize()?,
       file_type: other,
     }),
