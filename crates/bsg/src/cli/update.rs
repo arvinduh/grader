@@ -1,17 +1,13 @@
 //! The `update` command: replaces the running binary with the latest release.
 //!
-//! Checks GitHub releases for a newer version and drives `axoupdater` to
+//! Checks `GitHub` releases for a newer version and drives `axoupdater` to
 //! download and replace the running binary in place.
 
-use std::env;
-use std::ffi;
-use std::io;
-use std::path;
+use std::path::{Path, PathBuf};
+use std::{env, ffi, io};
 
-use axoupdater::AxoUpdater;
-use axoupdater::AxoupdateError;
+use axoupdater::{AxoUpdater, AxoupdateError};
 use semver::Version;
-use tempfile;
 use tokio::runtime;
 
 /// The cargo-dist package name that names release installer assets.
@@ -29,17 +25,14 @@ pub enum Error {
     path.display(),
     env::consts::EXE_SUFFIX
   )]
-  NotNamedBsg { path: path::PathBuf },
+  NotNamedBsg { path: PathBuf },
 
   /// The binary's directory cannot be written.
   #[error(
     "cannot write to {}: {source}; rerun with permission to write there",
     dir.display()
   )]
-  Unwritable {
-    dir: path::PathBuf,
-    source: io::Error,
-  },
+  Unwritable { dir: PathBuf, source: io::Error },
 
   /// The installer ran and failed.
   #[error(
@@ -52,7 +45,7 @@ pub enum Error {
   )]
   InstallerFailed { status: Option<i32> },
 
-  /// The current version is not valid SemVer.
+  /// The current version is not valid `SemVer`.
   #[error("invalid current version: {0}")]
   Version(#[from] semver::Error),
 
@@ -117,27 +110,29 @@ impl UpdateArgs {
       env::set_var("BSG_NO_MODIFY_PATH", "1");
     };
 
-    match rt.block_on(updater.run()).map_err(|err| match err {
-      AxoupdateError::InstallFailed {
-        status,
-        stdout: None,
-        stderr: None,
-      } => Error::InstallerFailed { status },
-      err => Error::Update(Box::new(err)),
-    })? {
-      Some(_) => {
-        println!("updated bsg to v{latest}");
-        Ok(())
-      }
-      None => {
-        println!("bsg: up to date (v{current})");
-        Ok(())
-      }
+    let was_updated = rt
+      .block_on(updater.run())
+      .map_err(|err| match err {
+        AxoupdateError::InstallFailed {
+          status,
+          stdout: None,
+          stderr: None,
+        } => Error::InstallerFailed { status },
+        err => Error::Update(Box::new(err)),
+      })?
+      .is_some();
+
+    if was_updated {
+      println!("updated bsg to v{latest}");
+      Ok(())
+    } else {
+      println!("bsg: up to date (v{current})");
+      Ok(())
     }
   }
 }
 
-fn running_exe() -> io::Result<path::PathBuf> {
+fn running_exe() -> io::Result<PathBuf> {
   let exe = env::current_exe()?;
   if cfg!(windows) {
     Ok(exe)
@@ -146,11 +141,11 @@ fn running_exe() -> io::Result<path::PathBuf> {
   }
 }
 
-fn install_dir(exe: &path::Path) -> &path::Path {
-  exe.parent().unwrap_or_else(|| path::Path::new("."))
+fn install_dir(exe: &Path) -> &Path {
+  exe.parent().unwrap_or_else(|| Path::new("."))
 }
 
-fn check_replaceable(exe: &path::Path) -> Result<(), Error> {
+fn check_replaceable(exe: &Path) -> Result<(), Error> {
   let name = format!("{BIN_NAME}{}", env::consts::EXE_SUFFIX);
   let named =
     exe
@@ -172,7 +167,7 @@ fn check_replaceable(exe: &path::Path) -> Result<(), Error> {
   Ok(())
 }
 
-fn new_updater(exe: &path::Path, current: &str) -> Result<AxoUpdater, Error> {
+fn new_updater(exe: &Path, current: &str) -> Result<AxoUpdater, Error> {
   let dir = install_dir(exe).to_str().ok_or_else(|| {
     io::Error::new(io::ErrorKind::InvalidData, "install path is not UTF-8")
   })?;

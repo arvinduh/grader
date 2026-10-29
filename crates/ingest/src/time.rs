@@ -4,12 +4,11 @@
 //! PM`). This module normalizes the timestamp into standard `%I:%M %p` format
 //! before parsing.
 
-use chrono::NaiveDateTime;
-use chrono::ParseError;
-use thiserror;
+use chrono::{NaiveDateTime, ParseError};
 
 /// An error encountered while parsing a Brightspace timestamp.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 #[error("invalid timestamp `{text}`: {source}")]
 pub struct Error {
   /// The input text that failed to parse.

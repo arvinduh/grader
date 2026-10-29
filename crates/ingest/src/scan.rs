@@ -6,31 +6,22 @@
 //! level, and dropping OS and editor junk. File selection and destination
 //! naming belong to `select`.
 
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::io;
-use std::io::Read;
-use std::io::Seek;
+use std::collections::{BTreeMap, HashMap};
+use std::io::{self, Cursor, Read, Seek};
+use std::path::{Component, Path};
 
-use thiserror;
-use tracing;
+use chrono::NaiveDateTime;
 use zip::ZipArchive;
 use zip::read::ZipFile;
 use zip::result::ZipError;
 
-mod archive;
-mod model;
-mod roster;
-
-pub use archive::SubmittedFile;
-pub use archive::ZipLocation;
-pub use model::Name;
-pub use model::Student;
-pub use model::Submission;
-use roster::Roster;
+use crate::model::{Student, Submission, SubmittedFile, ZipLocation};
+use crate::roster::Roster;
+use crate::time;
 
 /// Errors produced during download archive scanning.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
   /// Underlying archive reading error.
   #[error(transparent)]
@@ -40,13 +31,23 @@ pub enum Error {
   #[error(transparent)]
   Io(#[from] io::Error),
 
-  /// Unrecognized or invalid folder structure inside the archive.
+  /// A folder does not follow `<id>-<assignment> - <name> - <date>`.
+  #[error("unrecognized submission folder `{folder}`")]
+  Folder {
+    /// The unparseable folder name.
+    folder: String,
+  },
+
+  /// An invalid timestamp was encountered.
   #[error(transparent)]
-  Archive(#[from] archive::Error),
+  Time(#[from] time::Error),
 
   /// A student name was not found in index.html.
   #[error("student `{name}` not found in index.html roster")]
-  StudentNotFound { name: String },
+  StudentNotFound {
+    /// Student name.
+    name: String,
+  },
 }
 
 /// Lists every student, submission attempt, and file in a download.
@@ -98,14 +99,12 @@ struct AttemptPath {
 
 /// Validates and filters a zip entry, returning its attempt folder and relative
 /// path.
-///
-/// Skips directory entries, unsafe paths, root-level files, and tooling junk.
 fn classify_entry<R: Read>(entry: &ZipFile<'_, R>) -> Option<AttemptPath> {
   if entry.is_dir() {
     return None;
   }
   let enclosed = entry.enclosed_name();
-  let Some(parts) = enclosed.as_deref().and_then(archive::split) else {
+  let Some(parts) = enclosed.as_deref().and_then(split) else {
     tracing::warn!(name = entry.name(), "Skipping unsafe entry name");
     return None;
   };
@@ -118,7 +117,7 @@ fn classify_entry<R: Read>(entry: &ZipFile<'_, R>) -> Option<AttemptPath> {
     }
     return None;
   }
-  if archive::is_junk(rest) {
+  if is_junk(rest) {
     return None;
   }
   Some(AttemptPath {
@@ -143,7 +142,7 @@ fn ensure_submission<'a>(
     );
   }
 
-  let (id, raw_name, submitted_at) = archive::parse_folder_name(folder)?;
+  let (id, raw_name, submitted_at) = parse_folder_name(folder)?;
   let name = roster
     .lookup(raw_name)
     .ok_or_else(|| Error::StudentNotFound {
@@ -180,11 +179,11 @@ fn read_submitted_files<R: Read>(
 ) -> Result<Vec<SubmittedFile>, ZipError> {
   let entry_name = entry.name().to_owned();
 
-  if archive::has_zip_extension(&rel_path) {
+  if has_zip_extension(&rel_path) {
     let mut bytes = Vec::new();
     entry.read_to_end(&mut bytes).map_err(ZipError::Io)?;
     let dir = rel_path.rfind('/').map_or("", |i| &rel_path[..=i]);
-    match archive::nested(bytes, dir, &entry_name) {
+    match nested(bytes, dir, &entry_name) {
       Ok(files) => return Ok(files),
       Err(err) => {
         tracing::warn!(%rel_path, %err, "Keeping unreadable nested zip as direct file");
@@ -196,4 +195,105 @@ fn read_submitted_files<R: Read>(
     rel_path,
     location: ZipLocation::Direct { entry: entry_name },
   }])
+}
+
+/// Parses Brightspace folder format: `<user_id>-<assignment_id> - <name> -
+/// <date>`.
+pub fn parse_folder_name(
+  folder: &str,
+) -> Result<(u32, &str, NaiveDateTime), Error> {
+  let parse = || {
+    let (ids, rest) = folder.split_once(" - ")?;
+    let (raw_name, time_str) = rest.rsplit_once(" - ")?;
+    let (user_id_str, _) = ids.split_once('-')?;
+    let user_id = user_id_str.parse::<u32>().ok()?;
+    Some((user_id, raw_name, time_str))
+  };
+
+  let (user_id, raw_name, time_str) = parse().ok_or_else(|| Error::Folder {
+    folder: folder.to_owned(),
+  })?;
+  let submitted_at = time::parse(time_str)?;
+  Ok((user_id, raw_name, submitted_at))
+}
+
+/// Lists a nested zip's files as they should appear in the attempt.
+pub fn nested(
+  bytes: Vec<u8>,
+  dir: &str,
+  zip_entry: &str,
+) -> Result<Vec<SubmittedFile>, ZipError> {
+  let mut zip = ZipArchive::new(Cursor::new(bytes))?;
+  let mut found: Vec<(String, String)> = Vec::new();
+
+  for index in 0..zip.len() {
+    let inner = zip.by_index_raw(index)?;
+    if inner.is_dir() {
+      continue;
+    }
+    let enclosed = inner.enclosed_name();
+    match enclosed.as_deref().and_then(split) {
+      Some(parts) if !is_junk(&parts) => {
+        found.push((parts.join("/"), inner.name().to_owned()));
+      }
+      Some(_) => {}
+      None => tracing::warn!(name = inner.name(), "Skipping unsafe entry name"),
+    }
+  }
+
+  let wrapper = found.first().and_then(|(path, _)| {
+    let prefix = &path[..=path.find('/')?];
+    let shared = found.iter().all(|(path, _)| path.starts_with(prefix));
+    shared.then_some(prefix.len())
+  });
+  let strip = wrapper.unwrap_or(0);
+
+  Ok(
+    found
+      .into_iter()
+      .map(|(path, inner)| SubmittedFile {
+        rel_path: format!("{dir}{}", &path[strip..]),
+        location: ZipLocation::Nested {
+          zip_entry: zip_entry.to_owned(),
+          inner_path: inner,
+        },
+      })
+      .collect(),
+  )
+}
+
+/// Splits a sanitized entry path into UTF-8 components.
+#[must_use]
+pub fn split(path: &Path) -> Option<Vec<&str>> {
+  path
+    .components()
+    .filter(|part| *part != Component::CurDir)
+    .map(|part| match part {
+      Component::Normal(part) => part.to_str(),
+      _ => None,
+    })
+    .collect()
+}
+
+/// Reports whether a path is OS, editor, or tooling debris not worth grading.
+#[must_use]
+pub fn is_junk(parts: &[&str]) -> bool {
+  let hidden = parts.iter().any(|part| {
+    part.starts_with('.')
+      || part.starts_with("~$")
+      || matches!(*part, "__MACOSX" | "__pycache__")
+  });
+  let windows = parts.last().is_some_and(|name| {
+    name.eq_ignore_ascii_case("thumbs.db")
+      || name.eq_ignore_ascii_case("desktop.ini")
+  });
+  hidden || windows
+}
+
+/// Reports whether a path names a `.zip` file, ignoring case.
+#[must_use]
+pub fn has_zip_extension(path: &str) -> bool {
+  Path::new(path)
+    .extension()
+    .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
 }

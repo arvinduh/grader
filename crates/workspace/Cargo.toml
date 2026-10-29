@@ -1,0 +1,17 @@
+[package]
+name = "bsg-workspace"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Course workspace discovery, layout paths, and configuration schemas for bsg"
+
+[dependencies]
+chrono = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+toml = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

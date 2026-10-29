@@ -1,0 +1,15 @@
+[package]
+name = "bsg-ledger"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Student late pass ledger and penalty calculation engine for bsg"
+
+[dependencies]
+bsg-workspace = { path = "../workspace" }
+chrono = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

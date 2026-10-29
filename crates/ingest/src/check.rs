@@ -4,19 +4,18 @@
 //! against existing manifests before any extraction work begins. Reading
 //! archives belongs to `scan`; extracting files belongs to `extract`.
 
-use std::fs;
-use std::io;
 use std::path::Path;
+use std::{fs, io};
 
 use chrono::NaiveDateTime;
-use tracing;
 
-use crate::ingest::find::Assignment;
-use crate::ingest::manifest::Manifest;
+use crate::find::Assignment;
+use crate::manifest::Manifest;
 
 /// State of an assignment's destination directory relative to an incoming
 /// download.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum DestinationState {
   /// Directory does not exist, or exists and is completely empty.
   Fresh,
@@ -41,6 +40,7 @@ pub enum DestinationState {
 
 /// Partitioned diagnosis of discovered input assignment archives.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct SourceDiagnosis {
   /// Unambiguous assignments with exactly one archive, ready for ingestion.
   pub ready: Vec<Assignment>,
@@ -52,6 +52,7 @@ pub struct SourceDiagnosis {
 
 /// Diagnoses discovered archives, partitioning them into ready assignments and
 /// conflicting duplicate sets sorted chronologically from oldest to newest.
+#[must_use]
 pub fn source(assignments: Vec<Assignment>) -> SourceDiagnosis {
   let mut assignments = assignments;
   assignments.sort_unstable_by(|a, b| {
@@ -71,7 +72,7 @@ pub fn source(assignments: Vec<Assignment>) -> SourceDiagnosis {
         .peek()
         .is_some_and(|next| next.name == group[0].name)
       {
-        group.push(current.next().unwrap());
+        group.push(current.next().expect("peek was Some"));
       }
       duplicates.push(group);
     } else {
@@ -87,7 +88,7 @@ pub fn source(assignments: Vec<Assignment>) -> SourceDiagnosis {
 ///
 /// # Errors
 ///
-/// Returns [io::Error] on I/O failures reading the directory or manifest.
+/// Returns [`io::Error`] on I/O failures reading the directory or manifest.
 pub fn destination(
   assignment: &Assignment,
   output_dir: &Path,

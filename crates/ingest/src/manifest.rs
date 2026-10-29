@@ -4,22 +4,23 @@
 //! submissions, and selected files. Deciding their contents is `select`'s job.
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::io;
 use std::path::Path;
+use std::{fs, io};
 
 use chrono::NaiveDateTime;
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::ingest::find::Assignment;
-use crate::ingest::scan::Name;
+use crate::find::Assignment;
+use crate::model::Name;
 
 /// In-memory and on-disk representation of an assignment manifest.
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Manifest {
+  /// Assignment metadata and download timestamp.
   #[serde(alias = "download")]
   pub assignment: Assignment,
+  /// Map of student slugs to their submission records and selected files.
   pub students: BTreeMap<String, StudentEntry>,
 }
 
@@ -50,6 +51,7 @@ impl Manifest {
 
 /// One student's identity, submission attempts, and selected files.
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StudentEntry {
   /// Unique Brightspace User ID.
   pub id: u32,
@@ -63,6 +65,7 @@ pub struct StudentEntry {
 
 /// One submission attempt: everything a student uploaded at one time.
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SubmissionRecord {
   /// Local time as Brightspace printed it, to the minute.
   pub submitted_at: NaiveDateTime,
@@ -75,6 +78,7 @@ pub struct SubmissionRecord {
 
 /// A selected file extracted to disk.
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SelectedFile {
   /// Original relative filename submitted by the student.
   pub original: String,

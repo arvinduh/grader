@@ -8,12 +8,10 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use chrono::NaiveDateTime;
-use scraper::ElementRef;
-use scraper::Html;
-use scraper::Selector;
+use scraper::{ElementRef, Html, Selector};
 
-use super::model::Name;
-use crate::ingest::time;
+use crate::model::Name;
+use crate::time;
 
 /// Selects table rows.
 static TR_SEL: LazyLock<Selector> =
@@ -43,6 +41,7 @@ impl Roster {
   /// - Student header rows (`bgcolor="#AAAAAA"`), containing `<b>Last,
   ///   First</b>`
   /// - Attempt rows (`bgcolor="white"`), containing comments and dates
+  #[must_use]
   pub fn from_html(html: &str) -> Self {
     let document = Html::parse_document(html);
     let mut natural_to_name = HashMap::new();
@@ -78,6 +77,7 @@ impl Roster {
   /// from index.html.
   ///
   /// Returns `None` if the student name does not appear in index.html.
+  #[must_use]
   pub fn lookup(&self, name: &str) -> Option<Name> {
     let key = name.trim().to_lowercase();
     self.natural_to_name.get(&key).cloned()
@@ -98,49 +98,21 @@ impl Roster {
 /// (`bgcolor="#AAAAAA"`).
 fn parse_student_header(tr: ElementRef<'_>) -> Option<Name> {
   let b = tr.select(&B_SEL).next()?;
-  let name_str = b.text().collect::<String>();
-  Name::from_comma(&name_str)
+  Name::from_comma(&b.text().collect::<String>())
 }
 
-/// Extracts the submission timestamp and optional comment from an attempt row
+/// Parses an attempt timestamp and optional submission comment from a row
 /// (`bgcolor="white"`).
 fn parse_attempt_row(
   tr: ElementRef<'_>,
 ) -> Option<(NaiveDateTime, Option<String>)> {
-  let tds: Vec<_> = tr.select(&TD_SEL).collect();
-  if tds.len() < 2 {
-    return None;
-  }
-
-  let date_text = tds[1].text().collect::<String>();
-  let time_str = date_text
-    .strip_prefix("Submitted:")
-    .unwrap_or(&date_text)
-    .trim();
-
-  let submitted_at = time::parse(time_str).ok()?;
-  let comment = parse_comment(tds[0]);
+  let mut tds = tr.select(&TD_SEL);
+  let time_str = tds.next()?.text().collect::<String>();
+  let submitted_at = time::parse(time_str.trim()).ok()?;
+  let comment = tds
+    .next()
+    .and_then(|td| td.select(&P_SEL).next())
+    .map(|p| p.text().collect::<String>())
+    .filter(|s| !s.is_empty());
   Some((submitted_at, comment))
-}
-
-/// Extracts non-empty submission comment lines from the first `<td>` element.
-fn parse_comment(td: ElementRef<'_>) -> Option<String> {
-  let mut lines = Vec::new();
-  for p in td.select(&P_SEL) {
-    let p_text = p.text().collect::<String>();
-    let content = if let Some((_, after)) = p_text.split_once("Comments:") {
-      after.trim()
-    } else {
-      p_text.trim()
-    };
-    if !content.is_empty() {
-      lines.push(content.to_owned());
-    }
-  }
-
-  if lines.is_empty() {
-    None
-  } else {
-    Some(lines.join("\n"))
-  }
 }

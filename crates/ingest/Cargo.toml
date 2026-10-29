@@ -1,0 +1,19 @@
+[package]
+name = "bsg-ingest"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Brightspace bulk assignment archive ingestion, extraction, and manifest engine for bsg"
+
+[dependencies]
+chrono = { workspace = true, features = ["serde"] }
+file_type_enum = { workspace = true }
+scraper = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+zip = { workspace = true }
+
+[lints]
+workspace = true

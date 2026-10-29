@@ -4,18 +4,15 @@
 //! extraction tasks. Reading the zip belongs to `scan`; writing files belongs
 //! to `extract`.
 
-use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
 use chrono::NaiveDateTime;
 
-use crate::ingest::extract;
-use crate::ingest::find::Assignment;
-use crate::ingest::manifest;
-use crate::ingest::scan::Student;
-use crate::ingest::scan::ZipLocation;
+use crate::find::Assignment;
+use crate::model::{Student, ZipLocation};
+use crate::{extract, manifest};
 
 /// A selected file with its clean relative path and submission time.
 struct SelectedFile<'a> {
@@ -35,6 +32,7 @@ struct SelectedFile<'a> {
 /// A student with one file gets `<slug>.<ext>`; otherwise files keep their
 /// relative paths under `<slug>/`. Colliding slugs get `_<user id>` appended,
 /// and an empty slug falls back to the user id.
+#[must_use]
 pub fn select(
   assignment: Assignment,
   students: &[Student],
@@ -185,9 +183,6 @@ fn destination_paths(
 }
 
 /// Splits a browser copy suffix off a path's file name.
-///
-/// Recognizes ` (N)` (Chrome, Edge) and `(N)` (Firefox) just before the
-/// extension, returning the path without it and `N`, or the path and `0`.
 fn strip_copy(path: &str) -> (String, u32) {
   let name_start = path.rfind('/').map_or(0, |i| i + 1);
   let ext_start = path[name_start..]

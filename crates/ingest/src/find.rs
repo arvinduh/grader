@@ -4,19 +4,18 @@
 //! archives match Brightspace naming conventions before passing them to the
 //! scanner.
 
-use std::fs;
-use std::io;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use chrono::NaiveDateTime;
 use file_type_enum::FileType;
-use tracing;
+use serde::{Deserialize, Serialize};
 
-use crate::ingest::time;
+use crate::time;
 
 /// Errors from parsing a Brightspace-generated name.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
   /// IO Error.
   #[error(transparent)]
@@ -24,15 +23,26 @@ pub enum Error {
 
   /// A candidate download path is not a regular file.
   #[error("expected {path} to be a file, got a {file_type}")]
-  FileType { path: PathBuf, file_type: FileType },
+  FileType {
+    /// Target path.
+    path: PathBuf,
+    /// Discovered file type.
+    file_type: FileType,
+  },
 
   /// A candidate download does not have a `.zip` extension.
   #[error("expected a `.zip` file, got {path}")]
-  Extension { path: PathBuf },
+  Extension {
+    /// Non-zip path.
+    path: PathBuf,
+  },
 
   /// A download file name does not match `<assignment> Download <date>.zip`.
   #[error("expected `.../<assignment> Download <date>.zip` got `{path}`")]
-  FileName { path: PathBuf },
+  FileName {
+    /// Unparseable path.
+    path: PathBuf,
+  },
 
   /// The timestamp encoded in the download file name could not be parsed.
   #[error(transparent)]
@@ -40,7 +50,8 @@ pub enum Error {
 }
 
 /// Metadata and archive location for a Brightspace assignment.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Assignment {
   /// Canonical path to the archive file on disk (omitted from manifests).
   #[serde(default, skip_serializing)]
@@ -62,7 +73,7 @@ impl Assignment {
   ///
   /// Fails if the file does not exist, is not a regular `.zip` file, or
   /// contains an invalid timestamp.
-  fn from_path(path: &Path) -> Result<Self, Error> {
+  pub fn from_path(path: &Path) -> Result<Self, Error> {
     let file_type = FileType::symlink_read_at(path)?;
 
     if file_type != FileType::Regular {
@@ -152,14 +163,14 @@ fn find_into(target: &Path, out: &mut Vec<Assignment>) -> Result<(), Error> {
               "Skipping invalid assignment file"
             );
           }
-        };
+        }
       }
       Ok(())
     }
 
-    _ => Err(Error::FileType {
+    other @ FileType::Symlink => Err(Error::FileType {
       path: target.canonicalize()?,
-      file_type,
+      file_type: other,
     }),
   }
 }

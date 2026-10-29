@@ -2,21 +2,18 @@
 //!
 //! Executes decisions only: which files and where come from `select`.
 
-use std::fs;
-use std::fs::File;
-use std::io;
-use std::io::Cursor;
-use std::io::Read;
-use std::io::Seek;
-use std::path::Path;
-use std::path::PathBuf;
+use std::fs::{self, File};
+use std::io::{self, Cursor, Read, Seek};
+use std::path::{Path, PathBuf};
 
 use zip::ZipArchive;
 use zip::result::ZipError;
 
-use crate::ingest::scan::ZipLocation;
+use crate::model::ZipLocation;
 
 /// A file to extract from the archive into the output directory.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Task {
   /// Destination path relative to output directory, `/`-separated.
   pub destination: String,

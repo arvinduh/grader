@@ -1,0 +1,13 @@
+[package]
+name = "bsg-runner"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Automated Python test runner and structured output parser for bsg"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

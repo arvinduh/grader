@@ -1,0 +1,13 @@
+[package]
+name = "bsg-notebook"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Jupyter notebook AST, prompt stripping, and AI grading markdown preparation for bsg"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

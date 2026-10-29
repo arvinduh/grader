@@ -1,13 +1,11 @@
 //! Data models representing scanned students, submissions, and files.
 
 use chrono::NaiveDateTime;
-
-use super::archive::SubmittedFile;
+use serde::{Deserialize, Serialize};
 
 /// A student's structured name.
-#[derive(
-  Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Name {
   /// First Name.
   pub first: String,
@@ -19,6 +17,7 @@ impl Name {
   /// Creates a [Name] from a comma-separated string, e.g. "Last, First".
   ///
   /// Returns `None` if `name` does not contain `','`.
+  #[must_use]
   pub fn from_comma(name: &str) -> Option<Self> {
     let (last, first) = name.split_once(',')?;
     Some(Self {
@@ -28,6 +27,7 @@ impl Name {
   }
 
   /// Builds a filesystem-safe `last_first` name, e.g. `doe_john`.
+  #[must_use]
   pub fn slug(&self) -> String {
     let name = self.last.chars().chain(['_']).chain(self.first.chars());
     let mut slug = String::new();
@@ -43,7 +43,37 @@ impl Name {
   }
 }
 
+/// Physical storage address inside the Brightspace download archive.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum ZipLocation {
+  /// File sits directly in the download zip.
+  Direct {
+    /// Name of the zip entry.
+    entry: String,
+  },
+  /// File sits inside a student-uploaded nested zip.
+  Nested {
+    /// Outer zip entry path.
+    zip_entry: String,
+    /// Path inside the nested zip.
+    inner_path: String,
+  },
+}
+
+/// A file uploaded by a student in a submission attempt.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct SubmittedFile {
+  /// The relative filename inside the submission (e.g. "hw2.ipynb").
+  pub rel_path: String,
+  /// Where the raw bytes are physically located in the archive.
+  pub location: ZipLocation,
+}
+
 /// One submission attempt: everything a student uploaded at one time.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Submission {
   /// Local time as Brightspace printed it, to the minute.
   pub submitted_at: NaiveDateTime,
@@ -54,6 +84,8 @@ pub struct Submission {
 }
 
 /// One student's identity and their submission history.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Student {
   /// Unique Brightspace User ID.
   pub id: u32,
